@@ -12,11 +12,13 @@ import { alive } from './lib/lock.mjs';
 import { doctor } from './lib/doctor.mjs';
 import { TOOL_VERSION } from './lib/version.mjs';
 import { verifyZip } from './lib/verification.mjs';
+import { verifyProviders } from './lib/verify-providers.mjs';
 import { exportSkills } from './lib/skills.mjs';
 
 const HELP = `Chat Rescue Agent — команды для AI-агента, без расширений и без TTY
 
 node agent.mjs doctor
+node agent.mjs verify --provider all|chatgpt|claude [--out /path/check]
 node agent.mjs skills --provider all|codex|claude-code|claude-web|local [--out /path/backup]
 node agent.mjs scrape --provider chatgpt --workspace work [--cdp http://127.0.0.1:9222]
 node agent.mjs start --provider chatgpt --workspace work [--browser chrome|chromium|msedge]
@@ -147,7 +149,8 @@ export async function main(argv = process.argv.slice(2)) {
   const command = positionals[0];
   if (values.help || !command) { console.log(HELP); return; }
   let result;
-  if (command === 'skills') result = await exportSkills({ source: values.provider || 'all', out: values.out, cwd: values.project || process.cwd(),
+  if (command === 'verify') result = await verifyProviders({ provider: values.provider || 'all', out: values.out, browser: values.browser || 'chrome', cdp_endpoint: values.cdp, source_tab: values['source-tab'] });
+  else if (command === 'skills') result = await exportSkills({ source: values.provider || 'all', out: values.out, cwd: values.project || process.cwd(),
     directories: values['skills-dir'] || [], include_plugins: !values['no-plugins'], include_system: !!values['include-system'],
     cdp_endpoint: values.cdp, source_tab: values['source-tab'], browser: values.browser || 'chrome' });
   else if (command === 'doctor') result = await doctor();
