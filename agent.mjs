@@ -193,7 +193,7 @@ export async function main(argv = process.argv.slice(2)) {
       let diagnostics = null;
       try { diagnostics = JSON.parse(await readFile(join(run.out, 'diagnostics.json'), 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
       result = { tool_version: run.tool_version || 'older_than_1.3', provider: run.provider, phase: run.phase, counts: run.counts,
-        connection: run.connection, attachment: run.attachment?.method, last_error: run.last_error, diagnostics,
+        connection: run.connection, attachment: run.attachment?.method, error_code: run.error_code || null, last_error: run.last_error, diagnostics,
         archive_verification: await verifyZip(run.out, run.zip) };
     }
   } else if (['status', 'inspect', 'continue', 'resume', 'stop', 'pack', 'close'].includes(command)) {
@@ -215,5 +215,5 @@ export async function main(argv = process.argv.slice(2)) {
   console.log(JSON.stringify(result, null, 2));
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.log(JSON.stringify({ error: error.message })); process.exitCode = 1; });
+  main().catch(error => { console.log(JSON.stringify({ error: error.message, error_code: error.code || null, tool_version: TOOL_VERSION })); process.exitCode = 1; });
 }

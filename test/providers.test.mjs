@@ -147,7 +147,8 @@ test('Claude refuses ambiguous or cyclic branches and flags explicitly truncated
 test('verify checks one actual browser conversation per provider without returning its contents', async () => {
   const report = await verifyProviders({ provider: 'all', out: join(root, 'verify'), cdp_endpoint: endpoint });
   assert.equal(report.verified_all, true); assert.equal(report.all_account_chats_verified, false);
-  for (const service of services) { assert.equal(report.providers[service].verified, true); assert.equal(report.providers[service].message_count, 2); }
+  assert.equal(report.json_verified_all, true);
+  for (const service of services) { assert.equal(report.providers[service].verified, true); assert.equal(report.providers[service].json_capture_verified, true); assert.equal(report.providers[service].message_count, 2); }
   assert.doesNotMatch(JSON.stringify(report), /PRIVATE_PROVIDER_|ABANDONED_BRANCH/);
   assert.equal(context.browser().isConnected(), true);
   assert.equal(context.pages().filter(page => /\/(c|chat)\//.test(page.url())).length, 2);
@@ -157,6 +158,7 @@ test('verify never reports success without a source session and writes a failure
     open: async () => { const error = new Error('No source tab'); error.code = 'no_source_tab'; throw error; }, close: async () => {},
   }) });
   assert.equal(report.verified_all, false);
+  assert.equal(report.json_verified_all, false);
   assert.deepEqual(report.requested_providers, services);
   for (const service of services) assert.equal(report.providers[service].failure_code, 'no_source_tab');
   assert.equal(JSON.parse(await readFile(report.report_file, 'utf8')).verified_all, false);
