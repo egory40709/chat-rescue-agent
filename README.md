@@ -1,6 +1,12 @@
-# Chat Rescue Agent 1.1
+# Chat Rescue Agent 1.1.1
 
-**Использует уже открытую локальную вкладку ChatGPT/Claude и сразу запускает выгрузку.**
+**Автоматически скачивает переписки по одной из открытой сессии ChatGPT/Claude.**
+
+Сбор работает через список истории: собирает ссылки → открывает первый диалог →
+сохраняет его сообщения в Markdown и JSON → переходит к следующему → собирает ZIP.
+**Кнопка «Экспорт данных» в настройках не используется и не требуется.** Если её нет
+в рабочем пространстве Team/Business, для этого механизма ничего не меняется.
+
 Сотрудник уже вошёл в нужный аккаунт. Инструмент подключается к этому браузеру,
 создаёт свою рабочую вкладку в том же профиле, сохраняет прочитанные чаты в Markdown
 и JSON и собирает ZIP. Повторного входа, ручного Enter и команды «продолжить» в
@@ -15,7 +21,8 @@
 [PROMPT.txt](PROMPT.txt):
 
 > Прочитай AGENTS.md и выгрузи мои доступные чаты ChatGPT/Claude. Я уже вошёл в
-> браузере. Используй текущую сессию, сразу запускай экспорт и дай ZIP.
+> браузере. Запусти `node agent.mjs scrape`: скачай чаты по одному и дай ZIP.
+> Кнопку «Экспорт данных» в настройках не используй.
 
 Агент сам устанавливает зависимости, запускает инструмент и следит за очередью.
 Одна ссылка на репозиторий в обычном веб-чате без локального выполнения кода не
@@ -27,7 +34,7 @@
 
 ```sh
 npm ci
-node agent.mjs export --provider chatgpt --workspace work
+node agent.mjs scrape --provider chatgpt --workspace work
 ```
 
 Для Claude — `--provider claude`. `workspace` — метка архива, а не пароль.
@@ -35,7 +42,7 @@ node agent.mjs export --provider chatgpt --workspace work
 Отдельную папку задаёт `--out "/путь/архив"`. Для двух сервисов запускайте две
 последовательные выгрузки с разными папками.
 
-`export` (и прежний `start`) возвращает `run_file`, а worker продолжает работать.
+`scrape` (совместимые команды: `export` и `start`) возвращает `run_file`, а worker продолжает работать.
 Сразу после подключения начинается поиск и сохранение. Агент опрашивает:
 
 ```sh
@@ -72,7 +79,7 @@ Events. Может потребоваться разрешение в macOS и �
 Если локальный CDP уже разрешён, его можно явно указать:
 
 ```sh
-node agent.mjs export --provider chatgpt --workspace work --cdp http://127.0.0.1:9222
+node agent.mjs scrape --provider chatgpt --workspace work --cdp http://127.0.0.1:9222
 ```
 
 Поддерживается и локальный `ws://127.0.0.1:…/devtools/browser/…`. Удалённые адреса,
@@ -142,8 +149,8 @@ node agent.mjs pack --run "/путь/run.json"
 снова подключиться с теми же provider/workspace/out. Повторный поиск добавит новые
 доступные ссылки, а сохранённые чаты проверятся по контрольным суммам.
 
-Для одной открытой переписки: `export --mode current`. Для известного списка:
-`export --urls-file links.txt` (одна HTTPS-ссылка в строке). В MCP используйте
+Для одной открытой переписки: `scrape --mode current`. Для известного списка:
+`scrape --urls-file links.txt` (одна HTTPS-ссылка в строке). В MCP используйте
 `initial_options: {mode: "current"}` или `{mode: "urls", urls: [...]}`.
 `--refresh` перечитывает выбранные чаты с сохранением предыдущих версий.
 `--max-scrolls` и `--list-scrolls` допускают до 5000 шагов; `--delay-ms` — минимум
@@ -158,7 +165,8 @@ node agent.mjs pack --run "/путь/run.json"
 
 В папке: `chats/*.md`, `chats/*.json`, версии, `INDEX.md`, `manifest.json`, ZIP.
 `run.json` и служебные команды не попадают в ZIP. Архив содержит EXPORT-ISSUES.json
-с результатом проверки целостности. Статусы: ready/discovering/exporting,
+с результатом проверки целостности. В статусе `extraction_method=rendered-ui-v1`, `native_export_required=false`.
+Статусы: ready/discovering/exporting,
 complete/needs_review/paused/blocked/failed; specific connection errors — в error_code.
 
 `complete` означает окончание выбранной очереди. Полнота всего аккаунта, архивных
@@ -177,5 +185,3 @@ npm run build
 ```
 
 Нет платных AI/API вызовов, загрузки архивов на сервер или копирования cookies.
-Для Claude существует и штатный экспорт сотрудника при разрешении Owner:
-[официальная инструкция](https://privacy.claude.com/en/articles/9450526-export-your-claude-data).

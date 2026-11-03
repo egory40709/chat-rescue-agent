@@ -14,7 +14,7 @@ import { doctor } from './lib/doctor.mjs';
 const HELP = `Chat Rescue Agent — команды для AI-агента, без расширений и без TTY
 
 node agent.mjs doctor
-node agent.mjs export --provider chatgpt --workspace work [--cdp http://127.0.0.1:9222]
+node agent.mjs scrape --provider chatgpt --workspace work [--cdp http://127.0.0.1:9222]
 node agent.mjs start --provider chatgpt --workspace work [--browser chrome|chromium|msedge]
 node agent.mjs status --run /absolute/path/run.json
 node agent.mjs inspect --run /absolute/path/run.json
@@ -25,7 +25,9 @@ node agent.mjs pack --run /absolute/path/run.json
 node agent.mjs close --run /absolute/path/run.json
 node agent.mjs config [--client generic|codex]
 
-export/start подключается к открытой сессии и сам начинает выгрузку.
+scrape (также export/start) подключается к открытой сессии, собирает ссылки,
+по очереди открывает каждый диалог и сохраняет его сообщения в Markdown/JSON и ZIP.
+Кнопка «Экспорт данных» в настройках ChatGPT/Claude не используется и не нужна.
 Новое окно входа не создаётся. --isolated явно выбирает старый отдельный профиль.
 Пароли и cookies не передаются в аргументах. Полнота истории не подтверждается.
 `;
@@ -125,7 +127,7 @@ export async function main(argv = process.argv.slice(2)) {
   } else if (command === 'worker') {
     if (!values.config) throw new Error('Worker запускается командой start.');
     const { worker } = await import('./lib/worker.mjs'); await worker(resolve(values.config)); return;
-  } else if (command === 'start' || command === 'export') {
+  } else if (command === 'start' || command === 'export' || command === 'scrape') {
     const browser = values.browser || (await doctor()).suggested_browser || 'chromium';
     const initialOptions = {};
     if (values.mode) initialOptions.mode = values.mode;
@@ -139,7 +141,7 @@ export async function main(argv = process.argv.slice(2)) {
     result = await startWorker({ provider: values.provider, workspace: values.workspace, browser, out: values.out,
       connection: values.isolated ? 'isolated' : 'existing', cdp_endpoint: values.cdp, source_tab: values['source-tab'],
       auto_start: values['no-auto'] ? false : !values.isolated, initial_options: initialOptions });
-    if (command === 'export' && result.reused && !values['no-auto'] && !values.isolated
+    if (['export', 'scrape'].includes(command) && result.reused && !values['no-auto'] && !values.isolated
       && ['complete', 'needs_review', 'paused', 'blocked', 'failed'].includes(result.phase)) {
       result = await sendCommand(result.run_file, 'continue', initialOptions);
     }

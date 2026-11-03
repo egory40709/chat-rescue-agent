@@ -25,6 +25,15 @@ async function waitFor(fn, predicate, timeout = 15000) {
 }
 function fixtureHtml(id, loggedIn, needsLogin = false) {
   if (!loggedIn || needsLogin) return '<!doctype html><meta charset="utf-8"><dialog open role="dialog" aria-modal="true">Войти на chatgpt.com <button>Продолжить с помощью Google</button></dialog>';
+  if (id.startsWith('team-')) return '<!doctype html><meta charset="utf-8"><title>Team fixture without native export</title>'
+    + '<header>Business workspace</header><aside id="history" style="height:70px;overflow-y:auto">'
+    + '<a href="/c/team-one">Первый рабочий чат</a><div style="height:350px"></div></aside>'
+    + '<main><article data-message-author-role="user" data-message-id="u">TEAM_QUESTION_' + id + '</article>'
+    + '<article data-message-author-role="assistant" data-message-id="a"><p>TEAM_ANSWER_' + id + '</p>'
+    + '<pre><code>const teamArchive = true;</code></pre></article></main>'
+    + '<script>const historyList=document.getElementById("history");historyList.addEventListener("scroll",()=>{'
+    + 'if(historyList.scrollTop>10&&!document.getElementById("older-chat"))'
+    + 'historyList.insertAdjacentHTML("beforeend",\'<a id="older-chat" href="/c/team-two">Второй рабочий чат</a>\');});</script>';
   return '<!doctype html><meta charset="utf-8"><title>Existing login fixture</title><aside><a href="/c/one">Один</a><a href="/c/two">Два</a></aside><main>'
     + '<article data-message-author-role="user" data-message-id="u">EXISTING_PRIVATE_QUESTION_' + id + '</article>'
     + '<article data-message-author-role="assistant" data-message-id="a"><p>EXISTING_PRIVATE_ANSWER_' + id + '</p></article></main>';
@@ -41,7 +50,7 @@ before(async () => {
     const url = route.request().url();
     const headers = await route.request().allHeaders();
     const signedIn = (headers.cookie || '').includes('fixture-login=already-signed-in');
-    requests.push({ url, signedIn });
+    requests.push({ url, signedIn, method: route.request().method(), navigation: route.request().isNavigationRequest() });
     const id = new URL(url).pathname.split('/').pop();
     const body = id === 'slow' && signedIn ? '<!doctype html><meta charset="utf-8"><main>Loading</main><script>setTimeout(()=>{document.body.innerHTML='
       + JSON.stringify(fixtureHtml(id, true)) + '},350)</script>' : fixtureHtml(id, signedIn, id === 'needs-login');
@@ -100,6 +109,40 @@ test('existing session exports immediately and inherits login without another si
   assert.equal(context.browser().isConnected(), true);
   assert.equal(context.pages().length, before);
   assert.match(await source.locator('main').innerText(), /EXISTING_PRIVATE_ANSWER_source/);
+});
+test('Team without Export data: discovers lazy history and saves each conversation directly', async () => {
+  const teamSource = await context.newPage(); await teamSource.goto('https://chatgpt.com/c/team-source');
+  assert.equal(await teamSource.getByRole('button', { name: /export data|экспорт данных/i }).count(), 0);
+  const cdp = await context.newCDPSession(teamSource);
+  const sourceTab = (await cdp.send('Target.getTargetInfo')).targetInfo.targetId; await cdp.detach();
+  const from = requests.length;
+  const exporter = session();
+  try {
+    const opened = await exporter.open({ provider: 'chatgpt', workspace: 'team-no-native-export',
+      out: join(root, 'team-no-native-export'), cdp_endpoint: endpoint, source_tab: sourceTab });
+    assert.ok(opened.job_id);
+    const done = await waitFor(() => exporter.status(), terminal);
+    assert.equal(done.phase, 'complete', JSON.stringify(done));
+    assert.equal(done.counts.saved, 2); assert.equal(done.last_discovery.observed_links, 2);
+    assert.equal(done.extraction_method, 'rendered-ui-v1'); assert.equal(done.native_export_required, false);
+    const manifest = JSON.parse(await readFile(done.manifest_file, 'utf8'));
+    assert.deepEqual(Object.keys(manifest.chats).sort(), ['team-one', 'team-two']);
+    for (const [id, chat] of Object.entries(manifest.chats)) {
+      const saved = JSON.parse(await readFile(join(done.out, chat.jsonFile), 'utf8'));
+      assert.equal(saved.method, 'rendered-ui-v1');
+      assert.deepEqual(saved.messages.map(message => message.role), ['user', 'assistant']);
+      assert.match(saved.messages[1].text, new RegExp('TEAM_ANSWER_' + id));
+      const markdown = await readFile(join(done.out, chat.markdownFile), 'utf8');
+      assert.match(markdown, new RegExp('TEAM_QUESTION_' + id)); assert.match(markdown, /const teamArchive = true;/);
+    }
+    const navigations = requests.slice(from).filter(request => request.navigation);
+    assert.deepEqual(navigations.map(request => new URL(request.url).pathname), ['/c/team-source', '/c/team-one', '/c/team-two']);
+    assert.ok(navigations.every(request => request.method === 'GET' && request.signedIn));
+    const zip = await readFile(done.zip.path); assert.equal(zip.readUInt32LE(0), 0x04034b50);
+    assert.equal(teamSource.url(), 'https://chatgpt.com/c/team-source');
+    assert.doesNotMatch(JSON.stringify(done), /TEAM_(QUESTION|ANSWER)_/);
+  } finally { await exporter.close(); await teamSource.close(); }
+  assert.equal(context.browser().isConnected(), true);
 });
 test('missing provider tabs do not create an isolated browser or a login window', async () => {
   const before = context.pages().length;
@@ -179,9 +222,9 @@ test('MCP open_export_session alone attaches and completes export without a cont
     await client.close();
   }
 });
-test('production CLI export command runs immediately in the existing session without continue', async () => {
+test('production CLI scrape command runs immediately in the existing session without continue', async () => {
   const script = resolve(import.meta.dirname, '../agent.mjs');
-  const started = JSON.parse((await exec(process.execPath, [script, 'export', '--provider', 'chatgpt', '--workspace', 'cli-existing',
+  const started = JSON.parse((await exec(process.execPath, [script, 'scrape', '--provider', 'chatgpt', '--workspace', 'cli-existing',
     '--out', join(root, 'cli-existing'), '--cdp', endpoint, '--mode', 'current'])).stdout);
   try {
     const done = await waitFor(async () => JSON.parse((await exec(process.execPath, [script, 'status', '--run', started.run_file])).stdout), terminal, 30000);
