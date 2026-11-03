@@ -1,0 +1,10 @@
+node_modules/
+exports/
+profiles/
+qa/
+*.zip
+*.bundle
+.env
+.env.*
+.DS_Store
+checksums-*.txt

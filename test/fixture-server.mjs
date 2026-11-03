@@ -1,0 +1,10 @@
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createServer } from '../lib/server.mjs';
+import { fixtureSession } from './fixtures.mjs';
+const root = process.env.FIXTURE_ROOT;
+if (!root) throw new Error('Test fixture requires its temporary directory.');
+const { server, shutdown } = createServer({ sessionFactory: () => fixtureSession(root) });
+const close = async () => { await shutdown(); await server.close(); };
+process.on('SIGTERM', () => close().catch(() => {}));
+process.stdin.on('end', () => close().catch(() => {}));
+await server.connect(new StdioServerTransport());
