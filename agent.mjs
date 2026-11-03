@@ -14,6 +14,7 @@ import { doctor } from './lib/doctor.mjs';
 const HELP = `Chat Rescue Agent — команды для AI-агента, без расширений и без TTY
 
 node agent.mjs doctor
+node agent.mjs export --provider chatgpt --workspace work [--cdp http://127.0.0.1:9222]
 node agent.mjs start --provider chatgpt --workspace work [--browser chrome|chromium|msedge]
 node agent.mjs status --run /absolute/path/run.json
 node agent.mjs inspect --run /absolute/path/run.json
@@ -24,9 +25,8 @@ node agent.mjs pack --run /absolute/path/run.json
 node agent.mjs close --run /absolute/path/run.json
 node agent.mjs config [--client generic|codex]
 
-start запускает собственный локальный browser worker и возвращает JSON.
-Сотрудник входит в браузере и выбирает workspace. После его сообщения агент
-сам вызывает continue, затем опрашивает status и получает готовый ZIP.
+export/start подключается к открытой сессии и сам начинает выгрузку.
+Новое окно входа не создаётся. --isolated явно выбирает старый отдельный профиль.
 Пароли и cookies не передаются в аргументах. Полнота истории не подтверждается.
 `;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -41,7 +41,7 @@ export async function readRun(path) {
     for (const entry of Object.values(manifest.chats)) counts[entry.status] = (counts[entry.status] || 0) + 1;
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const workerAlive = alive(run.pid);
-  const phase = !workerAlive && ['opening', 'awaiting_login', 'discovering', 'exporting'].includes(run.phase) ? 'interrupted' : run.phase;
+  const phase = !workerAlive && ['opening', 'ready', 'awaiting_login', 'discovering', 'exporting'].includes(run.phase) ? 'interrupted' : run.phase;
   return { ...run, phase, worker_alive: workerAlive, counts, run_file: runFile, coverage: 'unverified',
     index_file: join(run.out, 'INDEX.md'), manifest_file: join(run.out, 'manifest.json'),
     worker_log: join(run.out, '.worker.log') };
@@ -109,6 +109,7 @@ export async function main(argv = process.argv.slice(2)) {
     config: { type: 'string' }, client: { type: 'string', default: 'generic' }, mode: { type: 'string' },
     'urls-file': { type: 'string' }, refresh: { type: 'boolean' }, limit: { type: 'string' },
     'max-scrolls': { type: 'string' }, 'list-scrolls': { type: 'string' }, 'delay-ms': { type: 'string' },
+    isolated: { type: 'boolean' }, 'no-auto': { type: 'boolean' }, cdp: { type: 'string' }, 'source-tab': { type: 'string' },
   } });
   const command = positionals[0];
   if (values.help || !command) { console.log(HELP); return; }
@@ -124,10 +125,24 @@ export async function main(argv = process.argv.slice(2)) {
   } else if (command === 'worker') {
     if (!values.config) throw new Error('Worker запускается командой start.');
     const { worker } = await import('./lib/worker.mjs'); await worker(resolve(values.config)); return;
-  } else if (command === 'start') {
+  } else if (command === 'start' || command === 'export') {
     const browser = values.browser || (await doctor()).suggested_browser || 'chromium';
+    const initialOptions = {};
+    if (values.mode) initialOptions.mode = values.mode;
+    if (values.refresh) initialOptions.refresh = true;
+    if (values.limit !== undefined) initialOptions.limit = Number(values.limit);
+    for (const name of ['max-scrolls', 'list-scrolls', 'delay-ms']) if (values[name] !== undefined) initialOptions[name.replaceAll('-', '_')] = Number(values[name]);
+    if (values['urls-file']) {
+      initialOptions.urls = (await readFile(resolve(values['urls-file']), 'utf8')).split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+      initialOptions.mode = 'urls';
+    }
     result = await startWorker({ provider: values.provider, workspace: values.workspace, browser, out: values.out,
-      initial_options: values.mode ? { mode: values.mode } : undefined });
+      connection: values.isolated ? 'isolated' : 'existing', cdp_endpoint: values.cdp, source_tab: values['source-tab'],
+      auto_start: values['no-auto'] ? false : !values.isolated, initial_options: initialOptions });
+    if (command === 'export' && result.reused && !values['no-auto'] && !values.isolated
+      && ['complete', 'needs_review', 'paused', 'blocked', 'failed'].includes(result.phase)) {
+      result = await sendCommand(result.run_file, 'continue', initialOptions);
+    }
   } else if (['status', 'inspect', 'continue', 'resume', 'stop', 'pack', 'close'].includes(command)) {
     if (!values.run) throw new Error('Укажите --run с путём из ответа start.');
     if (command === 'status') result = await readRun(values.run);

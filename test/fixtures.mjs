@@ -5,7 +5,7 @@ import { ExportSession } from '../lib/session.mjs';
 
 // Test-only dependency injection. Production entry points never enable this factory.
 export function fixtureSession(root, transport = 'mcp', waitMs = 10) {
-  return new ExportSession({ profileRoot: join(root, 'profiles'), controlTransport: transport,
+  return new ExportSession({ profileRoot: join(root, 'profiles'), controlTransport: transport, defaultConnection: 'isolated',
     engineOptions: { waitMs, delayMs: 0 },
     launch: async ({ profile, provider }) => {
       const context = await chromium.launchPersistentContext(profile, { headless: true, chromiumSandbox: true });

@@ -57,9 +57,9 @@ test('real MCP stdio handshake exposes nine tools and an agent workflow prompt',
   const prompts = await client.listPrompts();
   assert.equal(prompts.prompts[0].name, 'export_my_chats');
   const prompt = await client.getPrompt({ name: 'export_my_chats', arguments: { provider: 'chatgpt', workspace: 'work' } });
-  assert.match(prompt.messages[0].content.text, /после моего сообщения|После моего сообщения/);
+  assert.match(prompt.messages[0].content.text, /уже открытую локальную вкладку/);
 });
-test('MCP opens a browser but will not export before the employee reports readiness', async () => {
+test('explicit isolated mode retains the manual login gate', async () => {
   const opened = await open('mcp-work'); sessionId = opened.session_id;
   assert.equal(opened.phase, 'awaiting_login');
   const result = await client.callTool({ name: 'start_export', arguments: { session_id: sessionId, user_ready: false } });
