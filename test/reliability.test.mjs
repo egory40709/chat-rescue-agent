@@ -46,9 +46,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); if (root) await rm(root, { recursive: true, force: true }); });
 function exporter(extra = {}) {
-  // These tests run alongside several real Chromium processes on shared CI.
-  // Keep polling fast, but allow response bodies time to reach the observer.
-  return new ExportSession({ engineOptions: { waitMs: 5, delayMs: 0, readinessMs: 2000 }, attach: async () => {
+  return new ExportSession({ engineOptions: { waitMs: 5, delayMs: 0, readinessMs: 200 }, attach: async () => {
     const page = await context.newPage(); await page.goto('https://chatgpt.com/c/home');
     return new AttachedContext(page, () => page.close(), { method: 'test-existing' });
   }, ...extra });

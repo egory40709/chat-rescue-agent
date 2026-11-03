@@ -190,6 +190,30 @@ test('stop and limit pauses have distinct reasons; resume preserves saved hashes
     assert.equal(stopped.phase, 'paused'); assert.equal(stopped.stop_reason, 'user_requested'); assert.equal(stopped.counts.failed, 0);
   } finally { await session.close(); }
 });
+test('resume arriving during the final paused-state write waits and starts the remaining queue', async () => {
+  const session = fixtureSession(root, 'direct', 30);
+  let releaseFinalWrite, holdingFinalWrite = false;
+  const finalWrite = new Promise(resolve => { releaseFinalWrite = resolve; });
+  const persist = session.persist.bind(session);
+  session.persist = async () => {
+    if (!holdingFinalWrite && session.state.phase === 'paused' && session.job) {
+      holdingFinalWrite = true; await finalWrite;
+    }
+    return persist();
+  };
+  try {
+    await session.open({ provider: 'chatgpt', workspace: 'resume-final-write', out: join(root, 'resume-final-write'), browser: 'chromium' });
+    await session.start({ user_ready: true, mode: 'urls', urls: ['https://chatgpt.com/c/resume-one', 'https://chatgpt.com/c/resume-two'], limit: 1 });
+    await waitFor(() => session.status(), state => state.phase === 'paused');
+    assert.equal(holdingFinalWrite, true);
+    let resumeReturned = false;
+    const resumed = session.resume({ user_ready: true }).then(status => { resumeReturned = true; return status; });
+    await sleep(30); assert.equal(resumeReturned, false, 'Resume must not return the previous paused job');
+    releaseFinalWrite(); await resumed;
+    const result = await waitFor(() => session.status(), terminal);
+    assert.equal(result.phase, 'complete', JSON.stringify(result)); assert.equal(result.counts.saved, 2);
+  } finally { releaseFinalWrite(); await session.close(); }
+});
 test('lock refuses live writers and retains unknown locks instead of deleting them', async () => {
   const out = join(root, 'locks');
   const release = await acquireLock(out);
