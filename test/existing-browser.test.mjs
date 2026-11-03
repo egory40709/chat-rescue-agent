@@ -124,7 +124,7 @@ test('Team without Export data: discovers lazy history and saves each conversati
     const done = await waitFor(() => exporter.status(), terminal);
     assert.equal(done.phase, 'complete', JSON.stringify(done));
     assert.equal(done.counts.saved, 2); assert.equal(done.last_discovery.observed_links, 2);
-    assert.equal(done.extraction_method, 'rendered-ui-v1'); assert.equal(done.native_export_required, false);
+    assert.equal(done.extraction_method, 'ui-conversation-v2'); assert.equal(done.native_export_required, false);
     const manifest = JSON.parse(await readFile(done.manifest_file, 'utf8'));
     assert.deepEqual(Object.keys(manifest.chats).sort(), ['team-one', 'team-two']);
     for (const [id, chat] of Object.entries(manifest.chats)) {
@@ -222,11 +222,13 @@ test('MCP open_export_session alone attaches and completes export without a cont
     await client.close();
   }
 });
-test('production CLI scrape command runs immediately in the existing session without continue', async () => {
+test('production CLI scrape waits for a verified archive in the existing session without continue', async () => {
   const script = resolve(import.meta.dirname, '../agent.mjs');
   const started = JSON.parse((await exec(process.execPath, [script, 'scrape', '--provider', 'chatgpt', '--workspace', 'cli-existing',
     '--out', join(root, 'cli-existing'), '--cdp', endpoint, '--mode', 'current'])).stdout);
   try {
+    assert.equal(started.export_finished, true); assert.equal(started.export_succeeded, true);
+    assert.equal(started.archive_verification.verified, true);
     const done = await waitFor(async () => JSON.parse((await exec(process.execPath, [script, 'status', '--run', started.run_file])).stdout), terminal, 30000);
     assert.equal(done.phase, 'complete', JSON.stringify(done));
     assert.equal(done.counts.saved, 1); assert.equal(done.connection, 'existing');
@@ -258,6 +260,7 @@ test('native macOS bridge retains the selected window, validates URLs and closes
       return { windowId: 7, tabId: '9' };
     }
     assert.equal(input.windowId, 7); assert.equal(input.tabId, '9');
+    if (input.action === 'navigate') { await work.goto(input.url); return { ok: true }; }
     if (input.action === 'info') return { url: work.url(), loading: false };
     if (input.action === 'execute') return JSON.parse(await work.evaluate(input.script));
     if (input.action === 'close') { await work.close(); return { ok: true }; }

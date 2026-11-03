@@ -10,6 +10,8 @@ import { defaultOut } from './lib/session.mjs';
 import { atomicWrite } from './lib/archive.mjs';
 import { alive } from './lib/lock.mjs';
 import { doctor } from './lib/doctor.mjs';
+import { TOOL_VERSION } from './lib/version.mjs';
+import { verifyZip } from './lib/verification.mjs';
 import { exportSkills } from './lib/skills.mjs';
 
 const HELP = `Chat Rescue Agent — команды для AI-агента, без расширений и без TTY
@@ -18,6 +20,8 @@ node agent.mjs doctor
 node agent.mjs skills --provider all|codex|claude-code|claude-web|local [--out /path/backup]
 node agent.mjs scrape --provider chatgpt --workspace work [--cdp http://127.0.0.1:9222]
 node agent.mjs start --provider chatgpt --workspace work [--browser chrome|chromium|msedge]
+node agent.mjs wait --run /absolute/path/run.json
+node agent.mjs diagnose --run /absolute/path/run.json
 node agent.mjs status --run /absolute/path/run.json
 node agent.mjs inspect --run /absolute/path/run.json
 node agent.mjs continue --run /absolute/path/run.json [--mode all|current|urls] [--urls-file links.txt]
@@ -30,6 +34,7 @@ node agent.mjs config [--client generic|codex]
 scrape (также export/start) подключается к открытой сессии, собирает ссылки,
 по очереди открывает каждый диалог и сохраняет его сообщения в Markdown/JSON и ZIP.
 Кнопка «Экспорт данных» в настройках ChatGPT/Claude не используется и не нужна.
+scrape/export ждёт завершения и проверки ZIP; --background возвращает управление сразу.
 Новое окно входа не создаётся. --isolated явно выбирает старый отдельный профиль.
 Пароли и cookies не передаются в аргументах. Полнота истории не подтверждается.
 `;
@@ -45,10 +50,24 @@ export async function readRun(path) {
     for (const entry of Object.values(manifest.chats)) counts[entry.status] = (counts[entry.status] || 0) + 1;
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const workerAlive = alive(run.pid);
-  const phase = !workerAlive && ['opening', 'ready', 'awaiting_login', 'discovering', 'exporting'].includes(run.phase) ? 'interrupted' : run.phase;
+  const phase = !workerAlive && ['opening', 'ready', 'awaiting_login', 'discovering', 'exporting', 'finalizing'].includes(run.phase) ? 'interrupted' : run.phase;
   return { ...run, phase, worker_alive: workerAlive, counts, run_file: runFile, coverage: 'unverified',
     index_file: join(run.out, 'INDEX.md'), manifest_file: join(run.out, 'manifest.json'),
     worker_log: join(run.out, '.worker.log') };
+}
+
+export async function waitForExport(runFile, { timeout = 3600000, interval = 500 } = {}) {
+  const started = Date.now();
+  while (true) {
+    const run = await readRun(runFile);
+    if (['complete', 'needs_review', 'paused', 'blocked', 'failed', 'interrupted', 'awaiting_login'].includes(run.phase)) {
+      const verification = await verifyZip(run.out, run.zip);
+      return { ...run, export_finished: !['interrupted', 'awaiting_login'].includes(run.phase), export_succeeded: run.phase === 'complete' && run.counts.saved > 0 && verification.verified, archive_verification: verification,
+        next_action: verification.verified ? 'Выдать путь к ZIP, числа saved/partial/failed/pending и закрыть рабочую вкладку через close.' : 'Сообщить точную ошибку; успешный архив не подтверждён. Открыть diagnostics.json через diagnose.' };
+    }
+    if (Date.now() - started > timeout) return { ...run, export_finished: false, wait_timed_out: true, next_action: 'Выгрузка ещё идёт. Продолжить wait; не объявлять ZIP готовым.' };
+    await sleep(interval);
+  }
 }
 
 export async function startWorker(options, { workerScript = fileURLToPath(import.meta.url), startupTimeout = 15000 } = {}) {
@@ -63,7 +82,14 @@ export async function startWorker(options, { workerScript = fileURLToPath(import
     if (previous.worker_alive) {
       if (previous.provider !== provider || previous.workspace !== workspace) throw new Error('Другой аккаунт уже использует эту папку.');
       if (previous.control_transport !== 'file-worker') throw new Error('Эта папка используется активной MCP-сессией. Продолжите её через MCP или сначала закройте.');
-      return { ...previous, reused: true };
+      if (previous.tool_version !== TOOL_VERSION || options.connection && previous.connection !== options.connection
+        || options.source_tab && options.source_tab !== previous.attachment?.source_tab) {
+        if (!['complete', 'needs_review', 'failed', 'blocked', 'paused'].includes(previous.phase)) throw new Error('Работает другая версия или сессия экспортера. Дождитесь завершения либо выполните close --run ' + runFile + ' перед новым запуском.');
+        await sendCommand(runFile, 'close');
+        const closeStarted = Date.now();
+        while (alive(previous.pid) && Date.now() - closeStarted < 5000) await sleep(100);
+        if (alive(previous.pid)) throw new Error('Прежний worker ещё закрывается; новый не запущен.');
+      } else return { ...previous, reused: true };
     }
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const configFile = join(out, '.launch-' + randomUUID() + '.json');
@@ -108,6 +134,7 @@ export async function sendCommand(runFile, action, options = {}, { timeout = 150
 
 export async function main(argv = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
+    background: { type: 'boolean' }, 'wait-timeout-ms': { type: 'string' },
     help: { type: 'boolean' }, provider: { type: 'string' }, workspace: { type: 'string' },
     browser: { type: 'string' }, out: { type: 'string' }, run: { type: 'string' },
     config: { type: 'string' }, client: { type: 'string', default: 'generic' }, mode: { type: 'string' },
@@ -151,6 +178,20 @@ export async function main(argv = process.argv.slice(2)) {
     if (['export', 'scrape'].includes(command) && result.reused && !values['no-auto'] && !values.isolated
       && ['complete', 'needs_review', 'paused', 'blocked', 'failed'].includes(result.phase)) {
       result = await sendCommand(result.run_file, 'continue', initialOptions);
+    }
+    if (['scrape', 'export'].includes(command) && !values.background && !values['no-auto'] && !values.isolated) {
+      result = await waitForExport(result.run_file, values['wait-timeout-ms'] ? { timeout: Number(values['wait-timeout-ms']) } : {});
+    }
+  } else if (command === 'wait' || command === 'diagnose') {
+    if (!values.run) throw new Error('Укажите --run с путём к run.json.');
+    if (command === 'wait') result = await waitForExport(resolve(values.run), values['wait-timeout-ms'] ? { timeout: Number(values['wait-timeout-ms']) } : {});
+    else {
+      const run = await readRun(values.run);
+      let diagnostics = null;
+      try { diagnostics = JSON.parse(await readFile(join(run.out, 'diagnostics.json'), 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      result = { tool_version: run.tool_version || 'older_than_1.3', provider: run.provider, phase: run.phase, counts: run.counts,
+        connection: run.connection, attachment: run.attachment?.method, last_error: run.last_error, diagnostics,
+        archive_verification: await verifyZip(run.out, run.zip) };
     }
   } else if (['status', 'inspect', 'continue', 'resume', 'stop', 'pack', 'close'].includes(command)) {
     if (!values.run) throw new Error('Укажите --run с путём из ответа start.');
