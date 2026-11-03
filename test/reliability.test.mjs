@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { TOOL_VERSION } from '../lib/version.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const exec = promisify(execFile);
@@ -160,7 +162,7 @@ test('native macOS routing, passive JSON capture and packaging complete all five
     await session.open({ provider: 'chatgpt', workspace: 'native-five', out: join(root, 'native-five') });
     const result = await done(session); assert.equal(result.phase, 'complete', JSON.stringify(result));
     assert.equal(result.counts.saved, 5); assert.equal(result.counts.partial, 0); assert.equal(result.zip.verification.verified, true);
-    await exec('python3', ['-c', 'import sys,json,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; m=json.loads(z.read("manifest.json")); assert len(m["chats"])==5; docs=[json.loads(z.read(e["jsonFile"])) for e in m["chats"].values()]; assert all(d["method"]=="observed-ui-json-v1" and [v["role"] for v in d["messages"]]==["user","assistant"] for d in docs)', result.zip.path]);
+    await exec(process.platform === 'win32' ? 'python' : 'python3', ['-c', 'import sys,json,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; m=json.loads(z.read("manifest.json")); assert len(m["chats"])==5; docs=[json.loads(z.read(e["jsonFile"])) for e in m["chats"].values()]; assert all(d["method"]=="observed-ui-json-v1" and [v["role"] for v in d["messages"]]==["user","assistant"] for d in docs)', result.zip.path]);
     assert.equal(original.isClosed(), false); assert.equal(original.url(), 'https://chatgpt.com/c/home');
     const manifest = JSON.parse(await readFile(result.manifest_file, 'utf8'));
     for (const entry of Object.values(manifest.chats)) {
@@ -184,7 +186,7 @@ test('a terminal error is exposed only after its partial archive has finished wr
 });
 test('an idle older worker is closed through its own protocol and upgraded while saved chats are kept', async () => {
   const out = join(root, 'upgrade'); const options = { provider: 'chatgpt', workspace: 'upgrade', out, connection: 'isolated', fixture_root: root };
-  const workerScript = new URL('./fixture-worker.mjs', import.meta.url).pathname;
+  const workerScript = fileURLToPath(new URL('./fixture-worker.mjs', import.meta.url));
   let run = await startWorker(options, { workerScript });
   try {
     await sendCommand(run.run_file, 'continue', { mode: 'all' });
@@ -193,7 +195,7 @@ test('an idle older worker is closed through its own protocol and upgraded while
     const state = JSON.parse(await readFile(run.run_file, 'utf8')); state.tool_version = '1.2.0'; await writeFile(run.run_file, JSON.stringify(state));
     const oldPid = run.pid;
     run = await startWorker(options, { workerScript });
-    assert.notEqual(run.pid, oldPid); assert.equal(run.tool_version, '1.3.0');
+    assert.notEqual(run.pid, oldPid); assert.equal(run.tool_version, TOOL_VERSION);
     assert.equal(run.counts.saved, first.counts.saved);
   } finally { await sendCommand(run.run_file, 'close'); }
 });

@@ -1,4 +1,4 @@
-# Chat Rescue Agent 1.3.0
+# Chat Rescue Agent 1.3.1
 
 **Автоматически скачивает переписки по одной из открытой сессии ChatGPT/Claude.**
 
@@ -71,6 +71,28 @@ node agent.mjs close --run "/путь/архив/run.json"
 
 Закрываются только рабочая вкладка и соединение инструмента. Исходная вкладка,
 другие окна и текущий вход сотрудника сохраняются.
+
+## Windows
+
+Для чатов и веб-Skills на Windows нужен уже открытый Chrome 144+ с разрешённым
+локальным CDP: `chrome://inspect/#remote-debugging`. Подтвердите запрос управления.
+Повторного входа в ChatGPT/Claude не требуется; Apple Events относится только к macOS.
+Если корпоративная политика запрещает доступ к браузеру, экспортёр показывает отказ.
+
+В PowerShell можно использовать `npm.cmd`, чтобы установка зависимостей не зависела
+от политики запуска PowerShell-скриптов. Политику ExecutionPolicy менять не нужно:
+
+```powershell
+npm.cmd ci
+node agent.mjs doctor
+node agent.mjs scrape --provider chatgpt --workspace work
+node agent.mjs skills --provider all
+```
+
+Локальные Skills Codex/Claude Code не требуют подключения к браузеру:
+`node agent.mjs skills --provider local`. Пути с пробелами заключайте в кавычки.
+В 1.3.1 учтены установки Chrome/Edge в AppData и Program Files, разделители Windows
+и пути рабочих процессов; статус проверки на Windows указан в [QA.md](QA.md).
 
 ## Разрешение подключиться к открытому браузеру
 

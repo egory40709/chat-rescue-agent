@@ -1,4 +1,4 @@
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -17,6 +17,7 @@ async function walk(directory) {
 }
 const paths = ['package.json', 'package-lock.json', 'agent.mjs', 'mcp.mjs', 'README.md', 'QA.md', 'AGENTS.md', 'CLAUDE.md', 'PROMPT.txt', '.gitignore',
   ...await walk('lib'), ...await walk('test'), ...await walk('scripts')];
+try { await access(join(root, '.github/workflows')); paths.push(...await walk('.github')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 for (const path of paths.filter(path => path.endsWith('.mjs'))) execFileSync(process.execPath, ['--check', join(root, path)]);
 const files = [];
 for (const path of paths) files.push({ name: 'chat-rescue-agent/' + path, content: await readFile(join(root, path)), executable: ['agent.mjs', 'mcp.mjs'].includes(path) });

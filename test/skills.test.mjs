@@ -86,23 +86,23 @@ test('local ZIP packages retain every instruction, binary asset and executable b
   for (const entry of manifest.skills) {
     const files = validateSkillZip(await readFile(join(result.out, entry.archive)));
     assert.equal(files.length, 3);
-    assert.ok(entry.files.find(file => file.path === 'scripts/run.sh').executable);
+    if (process.platform !== 'win32') assert.ok(entry.files.find(file => file.path === 'scripts/run.sh').executable);
   }
-  const check = await exec('python3', ['-c',
+  const check = await exec(process.platform === 'win32' ? 'python' : 'python3', ['-c',
     'import zipfile,io,sys; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; p=zipfile.ZipFile(io.BytesIO(z.read(next(n for n in z.namelist() if n.endswith(".zip"))))); assert p.testzip() is None; assert any(p.read(n)==bytes([0,255,17,2]) for n in p.namelist() if n.endswith(".bin")); assert all("auth.json" not in n for n in z.namelist()); print("ZIP verified")', result.zip.path]);
   assert.match(check.stdout, /ZIP verified/);
   assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SKILL_INSTRUCTIONS_|ACCOUNT_CREDENTIALS/);
 });
 test('linked skill folders work but links to files outside a skill are reported instead of copying them', async () => {
   const directory = join(root, 'symlinks'); await mkdir(directory);
-  await symlink(join(home, '.agents/skills/modern'), join(directory, 'linked'));
+  await symlink(join(home, '.agents/skills/modern'), join(directory, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
   const found = await collectLocalSkills({ source: 'codex', directories: [directory] }); assert.equal(found.skills.length, 1);
-  await symlink(join(home, '.codex/auth.json'), join(found.skills[0].resolved, 'outside.json'));
+  await symlink(join(home, '.codex'), join(found.skills[0].resolved, 'outside'), process.platform === 'win32' ? 'junction' : 'dir');
   try {
     const captured = await readSkillFiles(found.skills[0]);
     assert.ok(captured.issues.some(issue => issue.reason === 'external_symlink'));
-    assert.ok(!captured.files.some(file => file.name === 'outside.json'));
-  } finally { await rm(join(found.skills[0].resolved, 'outside.json')); }
+    assert.ok(!captured.files.some(file => file.name.startsWith('outside/')));
+  } finally { await rm(join(found.skills[0].resolved, 'outside')); }
 });
 test('local size limits and excluded local configs produce partial packages with explicit issues', async () => {
   const directory = join(root, 'limited'); await skill(directory);
