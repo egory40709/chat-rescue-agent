@@ -50,9 +50,9 @@ const terminal = state => ['complete', 'needs_review', 'blocked', 'failed', 'pau
 const open = (workspace, provider = 'chatgpt') => call('open_export_session', { provider, workspace, browser: 'chromium', out: join(root, workspace) });
 
 let sessionId, completed;
-test('real MCP stdio handshake exposes nine tools and an agent workflow prompt', async () => {
+test('real MCP stdio handshake exposes twelve tools and an agent workflow prompt', async () => {
   const tools = await client.listTools();
-  assert.equal(tools.tools.length, 9);
+  assert.equal(tools.tools.length, 12);
   assert.ok(tools.tools.some(tool => tool.name === 'start_export'));
   const prompts = await client.listPrompts();
   assert.equal(prompts.prompts[0].name, 'export_my_chats');

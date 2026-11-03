@@ -10,10 +10,12 @@ import { defaultOut } from './lib/session.mjs';
 import { atomicWrite } from './lib/archive.mjs';
 import { alive } from './lib/lock.mjs';
 import { doctor } from './lib/doctor.mjs';
+import { exportSkills } from './lib/skills.mjs';
 
 const HELP = `Chat Rescue Agent — команды для AI-агента, без расширений и без TTY
 
 node agent.mjs doctor
+node agent.mjs skills --provider all|codex|claude-code|claude-web|local [--out /path/backup]
 node agent.mjs scrape --provider chatgpt --workspace work [--cdp http://127.0.0.1:9222]
 node agent.mjs start --provider chatgpt --workspace work [--browser chrome|chromium|msedge]
 node agent.mjs status --run /absolute/path/run.json
@@ -111,12 +113,17 @@ export async function main(argv = process.argv.slice(2)) {
     config: { type: 'string' }, client: { type: 'string', default: 'generic' }, mode: { type: 'string' },
     'urls-file': { type: 'string' }, refresh: { type: 'boolean' }, limit: { type: 'string' },
     'max-scrolls': { type: 'string' }, 'list-scrolls': { type: 'string' }, 'delay-ms': { type: 'string' },
+    project: { type: 'string' }, 'skills-dir': { type: 'string', multiple: true },
+    'no-plugins': { type: 'boolean' }, 'include-system': { type: 'boolean' },
     isolated: { type: 'boolean' }, 'no-auto': { type: 'boolean' }, cdp: { type: 'string' }, 'source-tab': { type: 'string' },
   } });
   const command = positionals[0];
   if (values.help || !command) { console.log(HELP); return; }
   let result;
-  if (command === 'doctor') result = await doctor();
+  if (command === 'skills') result = await exportSkills({ source: values.provider || 'all', out: values.out, cwd: values.project || process.cwd(),
+    directories: values['skills-dir'] || [], include_plugins: !values['no-plugins'], include_system: !!values['include-system'],
+    cdp_endpoint: values.cdp, source_tab: values['source-tab'], browser: values.browser || 'chrome' });
+  else if (command === 'doctor') result = await doctor();
   else if (command === 'config') {
     const server = { command: process.execPath, args: [join(import.meta.dirname, 'mcp.mjs')] };
     if (values.client === 'codex') {

@@ -1,4 +1,4 @@
-# Chat Rescue Agent 1.1.1
+# Chat Rescue Agent 1.2.0
 
 **Автоматически скачивает переписки по одной из открытой сессии ChatGPT/Claude.**
 
@@ -135,6 +135,67 @@ claude mcp add --transport stdio chat-rescue -- node "/ABSOLUTE/PATH/chat-rescue
 Доступны прежние stop_export, resume_export, create_export_zip и check_environment.
 Ошибки подключения возвращаются с машиночитаемым `code`. Полные чаты в ответы
 инструментов не включаются. Существующие настройки AI-клиента сами не меняются.
+
+## Skills из Codex и Claude
+
+Отдельная команда сохраняет Skills целиком, включая `SKILL.md`, `scripts`,
+`references`, `assets` и бинарные шаблоны. Код из Skills не выполняется.
+
+```sh
+node agent.mjs skills --provider all
+```
+
+`all` проверяет локальные Skills Codex, Claude Code и веб-раздел Claude
+`Customize → Skills`. Веб-сбор использует уже открытую вкладку Claude: по очереди
+открывает найденные Skills и нажимает их **Download**, сохраняя оригинальные ZIP.
+Это скачивание конкретного Skill, а не штатный экспорт данных аккаунта.
+Если Claude недоступен, локальные Skills всё равно сохраняются, а отчёт содержит
+ошибку веб-сбора. Пустой или недоступный список не считается подтверждением полноты.
+
+Можно выбрать источник:
+
+```sh
+node agent.mjs skills --provider codex
+node agent.mjs skills --provider claude-code
+node agent.mjs skills --provider claude-web
+node agent.mjs skills --provider local
+```
+
+`codex` ищет `~/.agents/skills`, `$CODEX_HOME/skills` (обычно `~/.codex/skills`),
+проектные `.agents/skills` / `.codex/skills` от текущей папки до Git-корня, а также
+папки Skills в локальном кэше плагинов. Claude Code — `~/.claude/skills`, проектные
+`.claude/skills` и его кэш плагинов. Кэш может содержать несколько версий: они
+сохраняются отдельно, без утверждения, что все версии сейчас активны.
+[Пути Codex в OpenAI Docs](https://learn.chatgpt.com/docs/build-skills).
+
+`--project /path/project` задаёт исходный проект. `--skills-dir /path/skills`
+(можно несколько раз) заменяет автоматический поиск явно указанными каталогами.
+`--no-plugins` исключает кэш плагинов; `--include-system` добавляет локальные
+системные Skills и `/etc/codex/skills`. `--out /path/backup` задаёт папку результата.
+При повторном сохранении в ту же папку создаётся новый подкаталог, старый ZIP остаётся.
+
+Результат: отдельный ZIP на каждый Skill, общий `skills-backup.zip`, `INDEX.md`
+и `manifest.json` с именами файлов, SHA-256, источниками и пропусками. Отдельные ZIP
+можно распаковать в локальный каталог Skills или загрузить в Claude. В JSON-ответе
+CLI/MCP есть только метаданные, без содержимого инструкций.
+
+В MCP: `start_skills_export({source: "all"})` → `get_skills_export_status({job_id})`.
+Есть `stop_skills_export`; после остановки сохраняется архив уже полученных пакетов.
+В CLI команда работает без TTY и возвращает финальный JSON; агенту нужно дождаться
+завершения процесса. По умолчанию архивы находятся в `Downloads/chat-rescue/skills/`.
+
+Веб-сбор не обещает выгрузку всех общих, встроенных или закрытых Skills: нужен
+доступный в интерфейсе Download. Изменившийся интерфейс, отказ, внешний URL скачивания
+или неподдерживаемый ZIP показываются в отчёте. Нет скрытых API endpoint и обхода
+прав. Один веб-пакет ограничен 16 МБ, локальный Skill — 128 МБ, общая копия — 256 МБ.
+Настоящие `.env` и файлы авторизации аккаунта исключаются; шаблоны `.env.example` /
+`.env.template` / `.env.sample` сохраняются. `.git`, `node_modules` и виртуальные
+окружения пропускаются. Внешние симлинки внутри Skill пропускаются с отметкой;
+симлинк самой папки Skill поддерживается. При пропусках статус `partial/needs_review`.
+
+Живое скачивание Skills из корпоративного Claude пока не проверено. Браузерные
+проверки используют настоящие ZIP и Chromium с искусственными страницами.
+[Официальная инструкция Claude по Skills](https://support.claude.com/en/articles/12512180-use-skills-in-claude).
 
 ## Остановка, продолжение и выбор ссылок
 
