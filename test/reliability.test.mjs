@@ -46,7 +46,9 @@ before(async () => {
 });
 after(async () => { await browser?.close(); if (root) await rm(root, { recursive: true, force: true }); });
 function exporter(extra = {}) {
-  return new ExportSession({ engineOptions: { waitMs: 5, delayMs: 0, readinessMs: 200 }, attach: async () => {
+  // These tests run alongside several real Chromium processes on shared CI.
+  // Keep polling fast, but allow response bodies time to reach the observer.
+  return new ExportSession({ engineOptions: { waitMs: 5, delayMs: 0, readinessMs: 2000 }, attach: async () => {
     const page = await context.newPage(); await page.goto('https://chatgpt.com/c/home');
     return new AttachedContext(page, () => page.close(), { method: 'test-existing' });
   }, ...extra });
@@ -131,7 +133,7 @@ test('wait does not call an opening worker finished and independently checks the
   try {
     const opening = await session.open({ provider: 'chatgpt', workspace: 'wait', out: join(root, 'wait') });
     const final = await waitForExport(opening.run_file, { timeout: 10000, interval: 10 });
-    assert.equal(final.phase, 'complete'); assert.equal(final.export_finished, true); assert.equal(final.export_succeeded, true); assert.equal(final.archive_verification.verified, true);
+    assert.equal(final.phase, 'complete', JSON.stringify(await session.status())); assert.equal(final.export_finished, true); assert.equal(final.export_succeeded, true); assert.equal(final.archive_verification.verified, true);
     await writeFile(final.zip.path, 'tampered');
     assert.equal((await verifyZip(final.out, final.zip)).verified, false);
     assert.equal((await waitForExport(final.run_file)).export_succeeded, false);
