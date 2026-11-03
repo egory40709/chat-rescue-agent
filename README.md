@@ -146,9 +146,9 @@ node agent.mjs skills --provider all
 Локальные Skills Codex/Claude Code не требуют подключения к браузеру:
 `node agent.mjs skills --provider local`. Пути с пробелами заключайте в кавычки.
 В 1.3.1 учтены установки Chrome/Edge в AppData и Program Files, разделители Windows
-и пути рабочих процессов. [Прогон 1.3.3](https://github.com/egory40709/chat-rescue-agent/actions/runs/41633053830)
+и пути рабочих процессов. [Прогон 1.3.4](https://github.com/egory40709/chat-rescue-agent/actions/runs/41643936455)
 прошёл на настоящих Windows Server 2025 x64 с Node.js 22 и 24, а также macOS 26:
-по 74 успешных проверки, 0 ошибок. В каждой среде проверены CLI по 5/5 чатов
+по 87 успешных проверок, 0 ошибок. В каждой среде проверены CLI по 5/5 чатов
 ChatGPT и Claude, MCP обоих сервисов и архивы. Ответы сайтов искусственные;
 живой корпоративный аккаунт сотрудника в CI не используется;
 подробные границы проверки — в [QA.md](QA.md).

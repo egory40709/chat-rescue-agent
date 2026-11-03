@@ -121,7 +121,7 @@ Customize → Skills; к кнопке экспорта данных аккаун
 `verification-report.json`, проверь verified_all и результаты каждого provider.
 Для утверждения, что проверен новый JSON-способ, дополнительно требуется
 json_verified_all=true и json_capture_verified=true у каждого нужного provider.
-DOM-успех не является JSON-проверкой. На macOS observer_lost/native_observer_reset
+DOM-успех не является JSON-проверкой. На macOS native_observer_reset
 означает потерю fetch-наблюдателя при полном переходе; не выдавай её за сломанные роли.
 Содержимое чатов в контекст не загружай. Успех CI/искусственных страниц не называй
 живой проверкой аккаунта. Если вкладок нет, явно сообщи, что живой сбор не подтверждён;
