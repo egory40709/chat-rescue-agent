@@ -1,16 +1,34 @@
 # Проверка Chat Rescue Agent 1.3.1 — Windows
 
-На локальном macOS прошли 60 проверок; PowerShell проверяется отдельным Windows-only
-тестом. Полный прогон на Windows Node 22/24 и macOS Node 22 подготовлен в
-`.github/workflows/test.yml`; итог запуска будет записан после его завершения.
+[Успешный GitHub Actions прогон](https://github.com/egory40709/chat-rescue-agent/actions/runs/41624680862), commit
+`e21274c0cf4484828d17274cd1f48016f650a82d`, 03.11.2026.
 
-Исправлены поиск браузеров в AppData / Program Files, канонизация Git-корня и
-URL→путь для фонового worker. Тесты запускаются без shell-glob, Python вызывается
-под штатным именем платформы. Проверки ссылок используют junction на Windows;
-POSIX execute-bit там не считается существующим свойством файла.
+| Среда | Node.js | Passed | Failed | Skipped |
+| --- | --- | ---: | ---: | ---: |
+| Windows Server 2025 x64, windows-2025-vs2026 | 22.23.4 | 60 | 0 | 1 |
+| Windows Server 2025 x64, windows-2025-vs2026 | 24.22.2 | 60 | 0 | 1 |
+| macOS 26 arm64 | 22.23.4 | 60 | 0 | 1 |
 
-Проверка браузерного корпоративного аккаунта в CI не выполняется: только собственные
-искусственные сессии, реальные Chromium, CLI/MCP, архивы и контрольные суммы.
+На Windows пропущена только компиляция Apple Events, специфичная для macOS.
+На macOS пропущен Windows-only запуск из PowerShell. Сборка ZIP прошла во всех трёх jobs.
+
+На настоящих Windows-раннерах проверены stdio MCP, detached worker CLI, ожидание
+проверенного ZIP, повторный запуск, CDP к реальному Chromium, наследование тестовой
+сессии, пять диалогов по JSON UI, файловые пути с пробелами/кириллицей, архивы Skills
+и контрольные суммы. Встроенный powershell.exe запускает agent.mjs doctor без
+изменения ExecutionPolicy. Компиляция JXA также проверена отдельным macOS job.
+
+Исправлены поиск Chrome/Edge в AppData / Program Files, канонизация Git-корня и
+URL→путь для worker. Тесты запускаются без shell-glob; Python вызывается под штатным
+именем платформы. Проверки ссылок используют junction на Windows; POSIX execute-bit
+там не считается существующим свойством файла. Workflow использует только contents:read,
+стандартные публичные runners и закреплённые SHA официальных GitHub Actions.
+
+**Границы:** это Windows Server в CI с тестовыми страницами и искусственными сессиями,
+а не проверка корпоративного аккаунта на рабочем Windows 10/11 сотрудника. Системный
+диалог разрешения подключения к его обычному Chrome и SSO не проходились. Для
+доступа к существующей сессии на Windows необходим разрешённый локальный CDP; Apple
+Events там нет. Административные ограничения не обходятся.
 
 ---
 
