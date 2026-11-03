@@ -1,7 +1,21 @@
 # Проверка Chat Rescue Agent 1.3.3 — запись файлов Windows и продолжение
 
 Локально на macOS: **74 passed, 0 failed, 1 ожидаемый Windows-only skip** (75 тестов).
-ESLint прошёл. Результат полного Windows/macOS CI будет добавлен после завершения.
+ESLint и сборка исходников прошли.
+
+[Успешный полный CI](https://github.com/egory40709/chat-rescue-agent/actions/runs/41633053830),
+commit `49e03a7aec887152baf71e944ad1abcb29136ff5`, 03.11.2026:
+
+| Среда | Node.js | Passed | Failed | Skipped |
+| --- | --- | ---: | ---: | ---: |
+| Windows Server 2025 x64, windows-2025-vs2026 | 22.23.4 | 74 | 0 | 1 |
+| Windows Server 2025 x64, windows-2025-vs2026 | 24.22.2 | 74 | 0 | 1 |
+| macOS 26 arm64 | 22.23.4 | 74 | 0 | 1 |
+
+Во всех трёх jobs прошли CLI по 5/5 чатов каждого сервиса, MCP обоих сервисов,
+проверки ZIP, повторный запуск, продолжение и Skills. Сборка исходников также прошла.
+Пропущен только тест другой ОС: JXA на Windows, PowerShell на macOS.
+Ответы сайтов в этих тестах искусственные, а не живые корпоративные аккаунты.
 
 В [прогоне Windows Node 22](https://github.com/egory40709/chat-rescue-agent/actions/runs/41632184604)
 обнаружены реальные EPERM при атомарной замене run.json и manifest.json. Из-за этого
@@ -62,6 +76,8 @@ Windows Node 22 и macOS Node 22 прошли; Windows Node 24 упал на wai
 В доступном обычном Chrome не было ни одной вкладки chatgpt.com или claude.ai.
 Производственная `node agent.mjs verify --provider all` вернула verified_all=false:
 оба провайдера no_source_tab. Окна входа и новая авторизация не создавались.
+На версии 1.3.3 производственная команда повторена: тот же no_source_tab для обоих
+провайдеров и verified_all=false. Приватные отчёты исключены из исходников/релиза.
 Живой успешный сбор на обоих аккаунтах **пока не подтверждён**. Для него сотрудник
 может открыть по одному уже существующему непустому чату каждого сервиса и запустить
 ту же команду. Она выдаст verification-report.json без текста переписок.
